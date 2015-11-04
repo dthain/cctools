@@ -25,6 +25,7 @@ See the file COPYING for details.
 #include "work_queue.h"
 #include "work_queue_catalog.h"
 #include "xxmalloc.h"
+#include "jx.h"
 
 #include "dag.h"
 #include "dag_visitors.h"
@@ -523,7 +524,7 @@ Submit one fully formed job, retrying failures up to the makeflow_submit_timeout
 This is necessary because busy batch systems occasionally do not accept a job submission.
 */
 
-static batch_job_id_t makeflow_node_submit_retry( struct batch_queue *queue, const char *command, const char *input_files, const char *output_files, struct nvpair *envlist )
+static batch_job_id_t makeflow_node_submit_retry( struct batch_queue *queue, const char *command, const char *input_files, const char *output_files, struct jx *envlist )
 {
 	time_t stoptime = time(0) + makeflow_submit_timeout;
 	int waittime = 1;
@@ -641,7 +642,7 @@ static void makeflow_node_submit(struct dag *d, struct dag_node *n)
 	}
 
 	/* Generate the environment vars specific to this node. */
-	struct nvpair *envlist = dag_node_env_create(d,n);
+	struct jx *envlist = dag_node_env_create(d,n);
 
 	/*
 	Just before execution, replace double-percents with the nodeid.
@@ -682,7 +683,7 @@ static void makeflow_node_submit(struct dag *d, struct dag_node *n)
 	free(command);
 	free(input_files);
 	free(output_files);
-	nvpair_delete(envlist);
+	jx_delete(envlist);
 }
 
 static int makeflow_node_ready(struct dag *d, struct dag_node *n)
