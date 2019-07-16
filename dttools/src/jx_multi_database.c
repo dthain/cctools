@@ -132,7 +132,7 @@ int jx_multi_database_insert( struct jx_multi_database *mdb, const char *key, st
 
 	struct jx_database *db = hash_table_lookup(mdb->table,type);
 	if(!db) {
-		char *dbpath = string_format(mdb->path,type);
+		char *dbpath = string_format("%s/%s",mdb->path,type);
 		db = jx_database_create(dbpath);
 		free(dbpath);
 
