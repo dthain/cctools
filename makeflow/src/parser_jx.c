@@ -11,13 +11,14 @@ See the file COPYING for details.
 #include "parser_jx.h"
 #include "xxmalloc.h"
 #include "set.h"
+#include "list.h"
 #include "itable.h"
 #include "stringtools.h"
-#include "path.h"
 #include "hash_table.h"
 #include "debug.h"
 #include "parser.h"
 #include "rmsummary.h"
+#include "jx.h"
 #include "jx_eval.h"
 #include "jx_match.h"
 #include "jx_print.h"
@@ -194,36 +195,44 @@ static int rule_from_jx(struct dag *d, struct jx *j) {
 		return 0;
 	}
 
-	struct jx *makeflow = jx_lookup(j, "makeflow");
-	struct jx *command = jx_lookup(j, "command");
+	const char *type = jx_lookup_string(j,"type");
+	const char *command = 0;
+	const char *makeflow = 0;
 
-	if (makeflow && command) {
-        report_error(j->line, "rule is invalid because it defines both a command and a submakeflow.", NULL);
+	if(type) {
+		if(!strcmp(type,"command")) {
+			command = jx_lookup_string(j,"command");
+		} else if(!strcmp(type,"makeflow")) {
+			makeflow = jx_lookup_string(j,"makeflow");
+		} else {
+			report_error(j->line,"type must be \"command\" or \"makeflow\"",0);
+			return 0;
+		}
+	} else {
+		command = jx_lookup_string(j,"command");
+	}
+
+	if (!makeflow && !command) {
+		report_error(j->line,"no command defined",0);
 		return 0;
 	}
 
-	if (jx_istype(command, JX_STRING)) {
-		debug(D_MAKEFLOW_PARSER, "command: %s", command->u.string_value);
-		dag_node_set_command(n, command->u.string_value);
-	} else if (jx_istype(makeflow, JX_OBJECT)) {
-		const char *path = jx_lookup_string(makeflow, "path");
-		const char *cwd = jx_lookup_string(makeflow, "cwd");
+	if(command) {
+		n->nested_job = 0;
+		dag_node_set_command(n,command);
+	} else if(makeflow) {
+		n->nested_job = 1;
+		dag_node_set_submakeflow(n,makeflow,0);
 
-		if (!path) {
-            report_error(makeflow->line, "submakeflow must specify the \"path\" key.", NULL);
+		struct jx *args = jx_lookup(j, "args");
+		if (jx_istype(args, JX_OBJECT)) {
+			n->makeflow_args = jx_copy(args);
+		} else {
+			report_error(j->line,"args to sub-workflow must be an object",0);
 			return 0;
 		}
-		debug(D_MAKEFLOW_PARSER, "Line %u: Submakeflow at %s", makeflow->line, path);
-		dag_node_set_submakeflow(n, path, cwd);
-		if (cwd) {
-			debug(D_MAKEFLOW_PARSER, "working directory %s", cwd);
-		} else {
-			debug(D_MAKEFLOW_PARSER,
-				"Sub-Makeflow at line %u: cwd malformed or missing, using process cwd",
-				makeflow->line);
-		}
 	} else {
-        report_error(j->line, "rule neither defines a command nor a submakeflow.", NULL);
+	        report_error(j->line, "rule neither defines a command nor a submakeflow",0);
 		return 0;
 	}
 

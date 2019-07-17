@@ -30,10 +30,12 @@ See the file COPYING for details.
 #include "jx_match.h"
 #include "jx_parse.h"
 #include "jx_getopt.h"
+#include "jx_print.h"
 #include "create_dir.h"
 #include "sha1.h"
 
 #include "dag.h"
+#include "dag_file.h"
 #include "dag_node.h"
 #include "dag_node_footprint.h"
 #include "dag_visitors.h"
@@ -59,6 +61,7 @@ See the file COPYING for details.
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <libgen.h>
+#include <time.h>
 
 #include <assert.h>
 #include <unistd.h>
@@ -212,11 +215,67 @@ static void makeflow_node_expand( struct dag_node *n, struct batch_queue *queue,
 {
 	makeflow_generate_files(n, task);
 
+	if(n->nested_job) {
+		char *context_content = jx_print_string(n->makeflow_args);
+		char *tag = string_format("%s.%u", strdup(n->makeflow_dag), (unsigned)time(NULL));
+		char *context_title = string_format("context.jx.%s", tag);
+		n->context_file = context_title;
+		FILE *context_file = fopen(context_title, "w");
+		if(!context_file){
+			fprintf(stderr, "Erorr creating file: %s\n", strerror(errno));
+			exit(1);
+		}
+		fputs(context_content, context_file);
+		fclose(context_file);
+		n->log_file = string_format("%s.makeflowlog", tag);
+		n->sub_dir = string_format("%s.%u", n->makeflow_dag, n->nodeid);
+
+		makeflow_hook_add_input_file(n->d, task, n->makeflow_dag, n->makeflow_dag, DAG_FILE_TYPE_GLOBAL);
+		makeflow_hook_add_input_file(n->d, task, context_title, context_title, DAG_FILE_TYPE_TEMP);
+		makeflow_hook_add_output_file(n->d, task, n->log_file, n->log_file, DAG_FILE_TYPE_TEMP);
+	}
+
 	/* Expand the command according to each of the wrappers */
 	makeflow_wrap_wrapper(task, n, wrapper);
 	makeflow_wrap_enforcer(task, n, enforcer);
 	makeflow_wrap_umbrella(task, n, umbrella, queue);
 }
+
+/*
+char *submakeflow_command_create(struct dag_node *n, struct list **input_list, struct list **output_list){
+	struct list_node *file;
+	char * input_string = NULL;
+	list_first_item(*input_list);
+	file = list_next_item(*input_list);
+	while(file){
+		char *remote_file = NULL;
+		struct dag_file *orig_file = (struct dag_file *) hash_table_lookup(n->d->files, (char *) file->data);
+		if((remote_file = itable_lookup(n->remote_names, (uintptr_t) orig_file))) { }
+		else remote_file = file->data;
+		input_string = string_combine(input_string, string_format("cp -R %s %s/%s&& ", (char *) file->data, n->sub_dir, remote_file));
+		file = list_next_item(*input_list);
+	}
+
+	char * output_string = NULL;
+	list_first_item(*output_list);
+	file = list_next_item(*output_list);
+	struct list_node *next_file = list_next_item(*output_list);
+	while(file){
+		char *remote_file = NULL;
+		struct dag_file *orig_file = (struct dag_file *) hash_table_lookup(n->d->files, (char *) file->data);
+		if((remote_file = itable_lookup(n->remote_names, (uintptr_t) orig_file))) { }
+		else remote_file = file->data;
+		if(next_file) output_string = string_combine(output_string, string_format("cp -R %s ../%s&& ", remote_file, (char *) file->data));
+		else  output_string = string_combine(output_string, string_format("cp -R %s ../%s", remote_file, (char *) file->data));
+		file = next_file;
+		next_file = list_next_item(*output_list);
+	}
+	// Explitly pass in name of desired log file
+	//char * new_command = string_format("mkdir %s; %s cd %s; makeflow -T local -j %d --makeflow-log=\"%s\" --jx %s --jx-context=\"%s\"; %s cd ../; rm -rf %s; rm %s;", n->sub_dir, input_string, n->sub_dir, n->local_jobs_avail, n->log_file, n->makeflow_dag, n->context_file, output_string, n->sub_dir, n->context_file);
+	char * new_command = string_format("mkdir %s&& %s (cd %s&& makeflow -T local --local-cores=1 --makeflow-log=\"%s\" --jx %s --jx-context=\"%s\"&& %s); status=$?; rm -rf %s; rm %s; exit $status;", n->sub_dir, input_string, n->sub_dir, n->log_file, n->makeflow_dag, n->context_file, output_string, n->sub_dir, n->context_file);
+	return new_command;
+}
+*/
 
 /*
 Abort one job in a given batch queue.
@@ -437,10 +496,7 @@ static void makeflow_prepare_nested_jobs(struct dag *d)
 		struct dag_node *n;
 		for(n = d->nodes; n; n = n->next) {
 			if(n->nested_job && ((n->local_job && local_queue) || batch_queue_type == BATCH_QUEUE_TYPE_LOCAL)) {
-				char *command = xxmalloc(strlen(n->command) + 20);
-				sprintf(command, "%s -j %d", n->command, local_jobs_max / dag_nested_width);
-				free((char *) n->command);
-				n->command = command;
+				n->local_jobs_avail = local_jobs_max / dag_nested_width;
 			}
 		}
 	}
@@ -892,9 +948,11 @@ static int makeflow_check_batch_consistency(struct dag *d)
 				error = 1;
 				break;
 			} else if (!batch_queue_supports_feature(remote_queue, "remote_rename")) {
-				debug(D_ERROR, "Remote renaming is not supported on selected batch system. Rule %d (line %d).\n", n->nodeid, n->linenum);
-				error = 1;
-				break;
+				if(!n->nested_job){
+					debug(D_ERROR, "Remote renaming is not supported on selected batch system. Rule %d (line %d).\n", n->nodeid, n->linenum);
+					error = 1;
+					break;
+				}
 			}
 		}
 	}

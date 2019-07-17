@@ -70,10 +70,14 @@ If there is no corresponding category defined, default values will be filled in.
     "category"    : &lt;string&gt;
     "resources"   : { ... }
     "allocation"  : &lt;string&gt;
+
+    "type"        : "command" | "makeflow"
+    "makeflow"    : &lt;string&gt;
+    "args"        : { ... }
 }
 </code>
 
-<p>Required: The <tt>command</tt> string gives the Unix command to execute to carry out the job.</p>
+<p>Required: The <tt>command</tt> field gives the Unix command to execute to carry out the job.</p>
 
 <p>Required: The <tt>inputs</tt> and <tt>outputs</tt> arrays list the files required and produced by the command.
 These arrays must be an accurate description of the actual behavior of the command, otherwise the workflow
@@ -96,6 +100,15 @@ The name given should correspond to the key of a category object in the global w
 </ul>
 
 <p>Optional: <tt>environment</tt> specifies environment variables, described below.</p>
+
+<p>Optional: The <tt>type</tt> string may be "command" or "makeflow", indicating whether the rule
+represents a single Unix command, or refers to a sub-workflow.  The default is "command".</p>
+
+<p>Optional: If the <tt>type</tt> is <tt>makeflow</tt> then the <tt>makeflow</tt> field gives the
+path to the sub-workflow to be run.</p>
+
+<p>Optional: If the <tt>type</tt> is <tt>makeflow</tt> then the <tt>args</tt> field contains
+a set of name-value pairs to be passed as arguments to the sub-workflow.</p>
 
 <h3>Files</h3>
 
