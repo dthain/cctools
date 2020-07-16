@@ -292,6 +292,8 @@ struct dataswarm_manager * dataswarm_manager_create()
 
 	m->worker_table = hash_table_create(0,0);
 	m->client_table = hash_table_create(0,0);
+	m->file_table = hash_table_create(0,0);
+	m->task_table = hash_table_create(0,0);
 
 	m->connect_timeout = 5;
 	m->stall_timeout = 30;
