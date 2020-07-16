@@ -12,16 +12,16 @@ struct dataswarm_manager {
 
 	struct link *manager_link;
 
+	time_t start_time;
+	const char *project_name;
+
 	int connect_timeout;
 	int stall_timeout;
 	int server_port;
 
-	int force_update;
 	time_t catalog_last_update_time;
-	int update_interval;
+	int    catalog_update_interval;
 	char * catalog_hosts;
-	time_t start_time;
-	const char *project_name;
 };
 
 struct dataswarm_manager * dataswarm_manager_create();

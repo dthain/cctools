@@ -45,7 +45,7 @@ struct jx * manager_status_jx( struct dataswarm_manager *m )
 
 void update_catalog( struct dataswarm_manager *m, int force_update )
 {
-	if(!m->force_update && (time(0) - m->catalog_last_update_time) < m->update_interval)
+	if(force_update && (time(0) - m->catalog_last_update_time) < m->catalog_update_interval)
 		return;
 
 	if(!m->catalog_hosts) m->catalog_hosts = strdup(CATALOG_HOST);
@@ -297,7 +297,7 @@ struct dataswarm_manager * dataswarm_manager_create()
 
 	m->connect_timeout = 5;
 	m->stall_timeout = 30;
-	m->update_interval = 60;
+	m->catalog_update_interval = 60;
 
 	m->project_name = "dataswarm";
 
