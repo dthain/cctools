@@ -45,7 +45,7 @@ struct jx * manager_status_jx( struct dataswarm_manager *m )
 
 void update_catalog( struct dataswarm_manager *m, int force_update )
 {
-	if(force_update && (time(0) - m->catalog_last_update_time) < m->catalog_update_interval)
+	if(!force_update && (time(0) - m->catalog_last_update_time) < m->catalog_update_interval)
 		return;
 
 	if(!m->catalog_hosts) m->catalog_hosts = strdup(CATALOG_HOST);
