@@ -2684,8 +2684,6 @@ static work_queue_msg_code_t process_queue_status( struct work_queue *q, struct 
 	jx_print_link(a,l,stoptime);
 	jx_delete(a);
 
-	remove_worker(q, target, WORKER_DISCONNECT_STATUS_WORKER);
-
 	return MSG_PROCESSED;
 }
 
