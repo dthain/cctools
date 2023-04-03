@@ -50,8 +50,8 @@ typedef enum {
 	WORK_QUEUE_SCHEDULE_UNSET = 0,
 	WORK_QUEUE_SCHEDULE_FCFS,      /**< Select worker on a first-come-first-serve basis. */
 	WORK_QUEUE_SCHEDULE_FILES,     /**< Select worker that has the most data required by the task. */
-	WORK_QUEUE_SCHEDULE_TIME,      /**< Select worker that has the fastest execution time on previous tasks. */
-	WORK_QUEUE_SCHEDULE_RAND,      /**< Select a random worker. (default) */
+	WORK_QUEUE_SCHEDULE_TIME,      /**< Select worker that has the fastest execution time on previous tasks. (default) */
+	WORK_QUEUE_SCHEDULE_RAND,      /**< Select a random worker. */
 	WORK_QUEUE_SCHEDULE_WORST      /**< Select the worst fit worker (the worker with more unused resources). */
 } work_queue_schedule_t;
 
