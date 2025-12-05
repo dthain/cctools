@@ -5,11 +5,25 @@
 
 #include <stdlib.h>
 
+/*
+A complete tree consists of a root node and a default cursor.
+Most operations on the tree as a whole are delegated to either
+recursive node operations or cursor operations, so that tree
+operations only return user data instead of tree nodes.
+*/
+
 struct btree {
 	struct btree_node *root;
 	struct btree_cursor *default_cursor;
 	unsigned size;
 };
+
+/*
+btree_cursor keeps track of an iteration position within a tree.
+The node pointer gives the exact node, while the visited value indicates
+the highest key already visited, so we can determine whether to go
+left, right, or up next.
+*/
 
 struct btree_cursor {
 	struct btree *tree;
@@ -17,24 +31,34 @@ struct btree_cursor {
 	btree_key_t visited;
 };
 
+/*
+btree_node is the heard of the structure, keeping track of child nodes
+as well as a parent pointer (to facilitate removal).  Each node is described
+by an integer key for sorting, and an opaque data value.
+*/  
+
 struct btree_node {
 	struct btree_node *parent;
 	struct btree_node *left;
 	struct btree_node *right;
 	btree_key_t key;
-	void *data;
+	void *value;
 };
 
-static struct btree_node * btree_node_create( struct btree_node *parent, struct btree_node *left, struct btree_node *right, btree_key_t key, void *data )
+/* Private: Create a new binary tree node. */
+
+static struct btree_node * btree_node_create( struct btree_node *parent, struct btree_node *left, struct btree_node *right, btree_key_t key, void *value )
 {
 	struct btree_node *n = malloc(sizeof(*n));
 	n->parent = parent;
 	n->left = left;
 	n->right = right;
 	n->key = key;
-	n->data = data;
+	n->value = value;
 	return n;
 }
+
+/* Private: Delete a binary tree node, along with all of its children recursively. */
 
 static void btree_node_delete( struct btree_node *n )
 {
@@ -43,6 +67,11 @@ static void btree_node_delete( struct btree_node *n )
 	btree_node_delete(n->right);
 	free(n);
 }
+
+/*
+Private: Insert a new node into the tree by descending to an unused leaf.
+For efficiency, work iterately instead of recursively.
+*/
 
 static void btree_node_insert( struct btree_node *n, struct btree_node *newnode )
 {
@@ -69,6 +98,11 @@ static void btree_node_insert( struct btree_node *n, struct btree_node *newnode 
 	}
 }
 
+/*
+Private: Lookup a given value in the tree by descending to the proper node.
+For efficiency, work iterately instead of recursively.
+*/
+
 static struct btree_node * btree_node_lookup( struct btree_node *n, btree_key_t key )
 {
 	if(!n) return 0;
@@ -83,32 +117,38 @@ static struct btree_node * btree_node_lookup( struct btree_node *n, btree_key_t 
 	}
 }
 
+/*
+Private: Remove a node from the tree by disconnecting its child and parent nodes,
+and fixing up the children accordingly.  Note that this does *not*
+delete the node itself, which should be done by btree_node_delete.
+*/
+
 static void btree_node_unlink( struct btree *tree, struct btree_node *n )
 {
-	struct btree_node **pp;
+	struct btree_node **pparent;
 	
 	/* First determine where my parent's pointer to me is located. */
 	
 	if(!n->parent) {
-		pp = &tree->root;
+		pparent = &tree->root;
 	} else if(n->parent->left==n) {
-		pp = &n->parent->left;
+		pparent = &n->parent->left;
 	} else if(n->parent->right==n) {
-		pp = &n->parent->right;
+		pparent = &n->parent->right;
 	} else {
 		fatal("btree_node_unlink: inconsistent parent link!");
 	}
 
 	if(!n->left && !n->right) {
 		/* no children, remove me and replace with null*/
-		*pp = 0;
+		*pparent = 0;
 	} else if(n->left && !n->right) {
 		/* one left child, replace me with left */
-		*pp = n->left;
+		*pparent = n->left;
 		n->left->parent = n->parent;
 	} else if(n->right && !n->left) {
 		/* one right child, replace me with right */
-		*pp = n->right;
+		*pparent = n->right;
 		n->right->parent = n->parent;
 	} else {
 		/* two children, replace me with next largest node */
@@ -120,17 +160,22 @@ static void btree_node_unlink( struct btree *tree, struct btree_node *n )
 
 		/* move the content of that node here */
 		n->key = r->key;
-		n->data = r->data;
+		n->value = r->value;
 
 		/* now toss that node */
 		btree_node_delete(r);
+
+		/* do NOT fall through here because n is preserved */
+		return;
 	}
 	
-	/* Null out this node's links so they are not deleted when this node is. */
+	/* Null out this node's links so that deletion will only affect the removed node. */
 	n->parent = 0;
 	n->left = 0;
 	n->right = 0;
 }
+
+/* Public: create a new empty binary tree with a default cursor */
 
 struct btree * btree_create()
 {
@@ -141,6 +186,8 @@ struct btree * btree_create()
 	return t;
 }
 
+/* Public: Delete a tree and all of its internal structure.  (But not the contained values.) */
+
 void btree_delete( struct btree *t )
 {
 	if(!t) return;
@@ -149,9 +196,11 @@ void btree_delete( struct btree *t )
 	free(t);
 }
 
-void btree_insert( struct btree *t, btree_key_t key, void *data )
+/* Public: Insert an object into the tree at the given key position. */
+
+void btree_insert( struct btree *t, btree_key_t key, void *value )
 {
-	struct btree_node *newnode = btree_node_create(0,0,0,key,data);
+	struct btree_node *newnode = btree_node_create(0,0,0,key,value);
 
 	if(!t->root) {
 		t->root = newnode;
@@ -162,19 +211,23 @@ void btree_insert( struct btree *t, btree_key_t key, void *data )
 	t->size++;
 }
 
+/* Public: Remove an item from the tree at the key position, if it exists. */
+
 void *btree_remove( struct btree *tree, int64_t key )
 {
 	struct btree_node *n = btree_node_lookup(tree->root,key);
 	if(n) {
-		void *data = n->data;
+		void *value = n->value;
 		btree_node_unlink(tree,n);
 		btree_node_delete(n);
 		tree->size--;
-		return data;
+		return value;
 	} else {
 		return 0;
 	}		
 }
+
+/* Create a new cursor, pointing to nothing. */
 
 struct btree_cursor * btree_cursor_create( struct btree *tree )
 {
@@ -185,10 +238,14 @@ struct btree_cursor * btree_cursor_create( struct btree *tree )
 	return c;
 }
 
+/* Destroy a cursor. */
+
 void btree_cursor_delete( struct btree_cursor *c )
 {
 	free(c);
 }
+
+/* Set the cursor just prior to the first item. */
 
 void btree_cursor_first( struct btree_cursor *c )
 {
@@ -202,6 +259,11 @@ void btree_cursor_first( struct btree_cursor *c )
 		c->visited = 0;
 	}	
 }
+
+/*
+Advance the cursor to the next item and return its value.
+Note that this works even if c->node is lost by recovering position from c->visited.
+*/
 
 void * btree_cursor_next( struct btree_cursor *c )
 {
@@ -220,7 +282,7 @@ void * btree_cursor_next( struct btree_cursor *c )
 		} else if(c->visited > c->node->key) {
 			/* Time to visit this node and return its key. */
 			c->visited = c->node->key;
-			return c->node->data;
+			return c->node->value;
 		} else if(c->node->right && c->visited > c->node->right->key ) {
 			/* There are unvisited nodes to the right, go there */
 			c->node = c->node->right;
@@ -234,11 +296,15 @@ void * btree_cursor_next( struct btree_cursor *c )
 	return 0;
 }
 
+/* Return the value at the current cursor position. */
+
 void * btree_cursor_value( struct btree_cursor *c )
 {
 	if(!c || !c->node) return 0;
-	return c->node->data;
+	return c->node->value;
 }
+
+/* Return the key at the current cursor position. */
 
 btree_key_t btree_cursor_key( struct btree_cursor *c )
 {
@@ -246,27 +312,37 @@ btree_key_t btree_cursor_key( struct btree_cursor *c )
 	return c->visited;
 }
 
+/*
+Remove the value at the current cursor position and return it.
+Once removed, the cursor will be "between" objects and return
+nothing until btree_cursor_next is called again.
+*/
+
 void * btree_cursor_remove( struct btree_cursor *c )
 {
 	if(!c) return 0;
 
-	void *data = 0;
+	void *value = 0;
 	
 	if(c->node) {
-		data = c->node->data;
+		value = c->node->value;
 
 		btree_node_unlink(c->tree,c->node);
 		btree_node_delete(c->node);
+
+		c->tree->size--;
 		
 		/* drop the pointer to the deleted item */
 		/* btree_cursor_next will recover using c->visited. */
 		c->node = 0;
 	} else {
-		data = 0;
+		value = 0;
 	}
 
-	return data;
+	return value;
 }
+
+/* Finally, we implement the iteration operations as actions on the default cursor */
 
 void btree_first_item( struct btree *t )
 {
@@ -274,10 +350,12 @@ void btree_first_item( struct btree *t )
 	btree_cursor_first(t->default_cursor);
 }
 	
-void *btree_next_item( struct btree *t )
+void *btree_next_item( struct btree *t, btree_key_t * key )
 {
 	if(!t) return 0;
-	return btree_cursor_next(t->default_cursor);
+	void * value = btree_cursor_next(t->default_cursor);
+	if(value) *key = btree_cursor_key(t->default_cursor);
+	return value;
 }
 
 void *btree_remove_item( struct btree *t )

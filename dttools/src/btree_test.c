@@ -21,8 +21,9 @@ int main(void)
     }
 
     printf("\nIterate once with a cursor (print all):\n");
+    btree_key_t key;
     char * value;
-    BTREE_ITERATE(t,value) {
+    BTREE_ITERATE(t,key,value) {
        printf("value: %s\n",value); 
     }
 
@@ -35,28 +36,23 @@ int main(void)
         printf("  key 5 not found\n");
     }
 
-    struct btree_cursor *c = btree_cursor_create(t);
-    printf("\nIterate again with cursor and remove even-keyed items via cursor_remove():\n");
-    btree_cursor_first(c);
-    while ((value = btree_cursor_next(c))) {
-        if(btree_cursor_key(c)%2) {
-            char *r = btree_cursor_remove(c);
+    printf("\nIterate again with cursor and remove even-keyed items\n");
+
+    BTREE_ITERATE(t,key,value) {
+        if(key%2) {
+	    char *r = btree_remove_item(t);
             assert(r==value);
         } else {
             printf("  keep: %s\n", value);
         }
     }
-    btree_cursor_delete(c);
 
     printf("\nFinal sweep: remove remaining items via a cursor and free their value:\n");
-    c = btree_cursor_create(t);
-    btree_cursor_first(c);
-    while ((value = btree_cursor_next(c))) {
-        void *r = btree_cursor_remove(c);
+    BTREE_ITERATE(t,key,value) {
+	void *r = btree_remove_item(t);
         printf("  freeing: %s\n", (char *)r);
         free(r);
     }
-    btree_cursor_delete(c);
 
     btree_delete(t);
 
